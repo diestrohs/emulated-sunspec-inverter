@@ -3,17 +3,23 @@
 SunSpec Fake WR (Wechselrichter) für EME20 / NIBE
 Basierend auf echten Fronius Modbus-Traces
 
-REGISTER-MAPPING (EME20):
-- 0x9CA2[0]: VPV1 (DC Voltage Panel 1) in 0.1V
-- 0x9CA2[1]: VPV2 (DC Voltage Panel 2) in 0.1V - NOCH NICHT GEFUNDEN!
-- 0x9C93[0]: Total Power (AC Watt)
-- 0x9C9D[0-1]: Total Energy (Wh) als 32-bit ⭐ GEFUNDEN!
-- 0x9CA7[0]: Temperatur in 0.1°C
-- 0x9C44: Manufacturer "Fronius"
-- 0x9CAB: Status (0x0002 = RUNNING)
-- 0x9C74: Serial Number
+REGISTER-MAPPING (Gefunden durch systematisches Testen):
+- 0x9C44: Manufacturer "Fronius" (FEST)
+- 0x9C74: Serial Number (FEST)
+- 0x9CAB: Status (0x0002 = RUNNING, FEST)
+- 0x9C93[0]: Total Power (AC Watt) ⭐ DYNAMISCH - später von EVCC gridPower
+- 0x9C9D[0-1]: Total Energy (Wh) als 32-bit ⭐ DYNAMISCH - akkumuliert
+- 0x9CA2[0]: VPV1 (DC Voltage in V) - OPTIONAL dynamisch
+- 0x9CA7[0]: Temperatur (in 0.1°C) - STATISCH oder dynamisch
+- 0x9CA2[1]: VPV2 - NOCH NICHT GEFUNDEN (nicht in EME20-Abfrage enthalten)
+
+WICHTIG für EVCC-Integration:
+- Total Power sollte GRID POWER (Überschuss) sein, nicht PV Power!
+- Grund: Batterie-Ladung muss abgezogen werden
+- Formel: max(0, gridPower) → nur positive Werte (Einspeisung)
 
 Port: 5202 (Modbus TCP)
+Version: v0.0.4
 """
 
 from pymodbus.server.sync import StartTcpServer
@@ -28,24 +34,22 @@ from pymodbus.datastore import ModbusSequentialDataBlock
 # Konfiguration - Hier alle Werte anpassen!
 # ====================================================
 
-# Gesamtleistung (AC Power - das sieht der EME20 als "Total Power")
-TOTAL_POWER_WATTS = 4000  # W
+# ========== FESTE WERTE (WR-Identität) ==========
+MANUFACTURER = "Fronius"           # Hersteller (bleibt immer gleich)
+SERIAL_NUMBER = "34110779"        # Seriennummer (statisch)
+MODEL = "Symo 10.0-3-M"           # Modell (optional, statisch)
+FIRMWARE_VERSION = "1.20.3-1"     # Firmware (statisch)
 
-# Gesamtenergie (kumuliert - das sieht der EME20 als "Total Energy")
-TOTAL_ENERGY_WH = 29286700  # Wh (= 29286,70 kWh im Display)
+# ========== STATISCHE KONFIGURATION ==========
+WR_STATUS = 0x0002                # 0x0002 = RUNNING, 0x0001 = IDLE
+WR_TEMPERATURE = 45               # °C (statisch, später evtl. dynamisch)
 
-# DC-Spannungen
-VPV1_VOLTAGE = 600  # V (String 1)
-VPV2_VOLTAGE = 500  # V (String 2)
-
-# WR-Temperatur
-WR_TEMPERATURE = 45  # °C
-
-# Slave ID (für Multi-WR Setup)
-SLAVE_ID = 1
-
-# Slave ID (1 oder 2, je nachdem welchen WR du simulieren willst)
-SLAVE_ID = 1
+# ========== DYNAMISCHE WERTE (später von EVCC) ==========
+# Diese Werte sollten später aus EVCC gridPower/pvPower kommen
+TOTAL_POWER_WATTS = 4000          # W - Grid Überschuss (positiv = Export)
+TOTAL_ENERGY_WH = 29286700        # Wh - Lifetime Energy (akkumuliert)
+VPV1_VOLTAGE = 600                # V - DC Voltage String 1 (optional aus pvPower)
+VPV2_VOLTAGE = 500                # V - DC Voltage String 2 (noch nicht gefunden)
 
 # ====================================================
 # Hilfsfunktionen
@@ -68,47 +72,48 @@ def str_to_regs(s, num_regs):
 register_data = {}
 
 # ====================================================
-# LÖSUNG GEFUNDEN! ⭐
-# 0x9CA2[0] = VPV1 (DC Voltage Panel 1) - DIREKT in 0.1V
-# 0x9CA2[1] = Scale Factor oder N/A  
-# 0x9C93[0] = TOTAL POWER (AC Power in Watt)
-# 0x9CA7[0] = Temperatur (WR) - mit * 10 für 0.1°C
+# SunSpec Register definieren
 # ====================================================
 
-# VPV1: DC Voltage OHNE Multiplikation!
-# 600V → 600 im Register (nicht 6000!)
-# EME20 zeigt es als XXX,X V (mit Dezimalstelle)
-# VPV2: NICHT in 0x9CA2[1] - muss woanders sein!
-register_data[0x9CA2] = [VPV1_VOLTAGE, 0x0000]  # VPV1, Scale Factor/N/A
+register_data = {}
+
+# ========== FESTE WR-IDENTITÄT ==========
+# Diese Register bleiben immer konstant
 
 # ---- 0x9C44 (40004): Manufacturer = "Fronius"
-register_data[0x9C44] = str_to_regs("Fronius", 5)
-
-# ---- 0x9C93 (40179): AC TOTAL POWER ⭐⭐⭐
-# DAS IST DAS REGISTER FÜR "TOTAL POWER"!
-# Zweites Register MUSS 0x0000 sein!
-register_data[0x9C93] = [TOTAL_POWER_WATTS, 0x0000]  # AC Power (W), MUSS 0 sein!
-
-# ---- 0x9CAB (40235): Inverter Status
-register_data[0x9CAB] = [0x0002]  # RUNNING
-
-# ---- 0x9CA7 (40199): Temperatur + Scale Factors
-# Register 0: Temperatur (BESTÄTIGT!)
-# Scale Factor -1 → 450 = 45,0°C
-register_data[0x9CA7] = [WR_TEMPERATURE * 10, 0x8000, 0x8000, 0xFFFF]  # Temp, Rest N/A
-
-# ---- 0x9C9D (40189): TOTAL ENERGY (WH) ⭐⭐⭐ GEFUNDEN!
-# EME20 zeigt dies als "Total Energy" in kWh an
-# 32-bit Wert: [High Word, Low Word]
-# Beispiel: 29286700 Wh = 0x01BED6EC → [0x01BE, 0xD6EC]
-energy_high = (TOTAL_ENERGY_WH >> 16) & 0xFFFF
-energy_low = TOTAL_ENERGY_WH & 0xFFFF
-register_data[0x9C9D] = [energy_high, energy_low, 0x0000]  # High, Low, Scale Factor?
+register_data[0x9C44] = str_to_regs(MANUFACTURER, 5)
 
 # ---- 0x9C74 (40148): Serial Number (16 Register = 32 Bytes)
-# WR1: "34110779"
-# WR2: "34521519"
-register_data[0x9C74] = str_to_regs("34110779", 16)
+register_data[0x9C74] = str_to_regs(SERIAL_NUMBER, 16)
+
+# ---- 0x9CAB (40235): Inverter Status
+register_data[0x9CAB] = [WR_STATUS]  # 0x0002 = RUNNING
+
+# ========== DYNAMISCHE WERTE (Später von EVCC) ==========
+# Diese Register ändern sich basierend auf aktuellen PV/Grid-Werten
+
+# ---- 0x9C93 (40179): AC TOTAL POWER ⭐⭐⭐
+# Wichtig: Hier sollte gridPower (Überschuss) rein, nicht pvPower!
+# Positiver Wert = Einspeisung ins Netz = verfügbar für NIBE
+# Bei EVCC Integration: max(0, gridPower) verwenden
+register_data[0x9C93] = [TOTAL_POWER_WATTS, 0x0000]  # AC Power (W), Scale Factor = 0
+
+# ---- 0x9CA2 (40167): VPV1 (DC Voltage String 1)
+# Direkte Spannung in Volt (KEINE Multiplikation mit 10!)
+# Optional: Später aus pvPower berechnen (pvPower / Strom)
+register_data[0x9CA2] = [VPV1_VOLTAGE, 0x0000]  # VPV1 (V), Scale Factor
+
+# ---- 0x9CA7 (40199): Temperatur + Scale Factors
+# Temperatur * 10 für 0.1°C Auflösung
+# 45°C → 450 im Register → Display zeigt 45,0°C
+register_data[0x9CA7] = [WR_TEMPERATURE * 10, 0x8000, 0x8000, 0xFFFF]  # Temp, Rest N/A
+
+# ---- 0x9C9D (40189): TOTAL ENERGY (WH) ⭐⭐⭐ 
+# Lifetime Energy in Wh (32-bit)
+# Könnte später akkumuliert werden (jede Stunde PV-Produktion addieren)
+energy_high = (TOTAL_ENERGY_WH >> 16) & 0xFFFF
+energy_low = TOTAL_ENERGY_WH & 0xFFFF
+register_data[0x9C9D] = [energy_high, energy_low, 0x0000]  # High, Low, Scale Factor
 
 # ====================================================
 # Holding Register Array bauen
@@ -162,16 +167,28 @@ context = ModbusServerContext(slaves=store, single=True)
 
 try:
     print("\n" + "="*70)
-    print("🚀 SunSpec Fake WR (Fronius Simulation) — v0.1.0")
+    print("🚀 SunSpec Fake WR (Fronius Simulation) — v0.0.4")
     print("="*70)
     print(f"📡 Modbus TCP Port: 5202")
-    print(f"🔌 Slave ID: {SLAVE_ID}")
-    print(f"⚡ Total Power (AC): {TOTAL_POWER_WATTS}W")
-    print(f"🔋 VPV1: {VPV1_VOLTAGE}V | VPV2: {VPV2_VOLTAGE}V")
-    print(f"🌡️  Temperatur: {WR_TEMPERATURE}°C")
-    print(f"🏭 Manufacturer: Fronius")
-    print(f"📟 Serial: 34110779")
-    print(f"✅ Status: RUNNING")
+    print(f"")
+    print(f"🏭 WR-Identität:")
+    print(f"   Manufacturer: {MANUFACTURER}")
+    print(f"   Model: {MODEL}")
+    print(f"   Serial: {SERIAL_NUMBER}")
+    print(f"   Firmware: {FIRMWARE_VERSION}")
+    print(f"   Status: {'RUNNING' if WR_STATUS == 0x0002 else 'IDLE'}")
+    print(f"")
+    print(f"⚡ Aktuelle Werte (statisch, später dynamisch von EVCC):")
+    print(f"   Total Power: {TOTAL_POWER_WATTS} W (Grid Überschuss)")
+    print(f"   Total Energy: {TOTAL_ENERGY_WH/1000:.2f} kWh (Lifetime)")
+    print(f"   VPV1: {VPV1_VOLTAGE} V (DC String 1)")
+    print(f"   Temperatur: {WR_TEMPERATURE}°C")
+    print(f"")
+    print(f"📝 Register-Mapping:")
+    print(f"   0x9C93 = Total Power (später von EVCC gridPower)")
+    print(f"   0x9C9D = Total Energy")
+    print(f"   0x9CA2 = VPV1")
+    print(f"   0x9CA7 = Temperature")
     print("="*70 + "\n")
     
     StartTcpServer(context, address=("0.0.0.0", 5202))
