@@ -5,12 +5,12 @@ Basierend auf echten Fronius Modbus-Traces
 
 REGISTER-MAPPING (EME20):
 - 0x9CA2[0]: VPV1 (DC Voltage Panel 1) in 0.1V
-- 0x9CA2[1]: VPV2 (DC Voltage Panel 2) in 0.1V
+- 0x9CA2[1]: VPV2 (DC Voltage Panel 2) in 0.1V - NOCH NICHT GEFUNDEN!
 - 0x9C93[0]: Total Power (AC Watt)
+- 0x9C9D[0-1]: Total Energy (Wh) als 32-bit ⭐ GEFUNDEN!
 - 0x9CA7[0]: Temperatur in 0.1°C
 - 0x9C44: Manufacturer "Fronius"
 - 0x9CAB: Status (0x0002 = RUNNING)
-- 0x9C9D: Firmware
 - 0x9C74: Serial Number
 
 Port: 5202 (Modbus TCP)
@@ -78,7 +78,8 @@ register_data = {}
 # VPV1: DC Voltage OHNE Multiplikation!
 # 600V → 600 im Register (nicht 6000!)
 # EME20 zeigt es als XXX,X V (mit Dezimalstelle)
-register_data[0x9CA2] = [VPV1_VOLTAGE, 0x0000]  # VPV1 DIREKT, kein *10!
+# VPV2: NICHT in 0x9CA2[1] - muss woanders sein!
+register_data[0x9CA2] = [VPV1_VOLTAGE, 0x0000]  # VPV1, Scale Factor/N/A
 
 # ---- 0x9C44 (40004): Manufacturer = "Fronius"
 register_data[0x9C44] = str_to_regs("Fronius", 5)
@@ -96,12 +97,13 @@ register_data[0x9CAB] = [0x0002]  # RUNNING
 # Scale Factor -1 → 450 = 45,0°C
 register_data[0x9CA7] = [WR_TEMPERATURE * 10, 0x8000, 0x8000, 0xFFFF]  # Temp, Rest N/A
 
-# ---- 0x9C9D (40189): Firmware
-# Original Werte wiederherstellen (nicht Total Energy!)
-register_data[0x9C9D] = [0xAE90, 0x0E12, 0xFFFE]  # Original Firmware-Werte
-# WR1: AE 90 0E 12 FF FE
-# WR2: 01 D0 43 90 00 00
-register_data[0x9C9D] = [0xAE90, 0x0E12, 0xFFFE]
+# ---- 0x9C9D (40189): TOTAL ENERGY (WH) ⭐⭐⭐ GEFUNDEN!
+# EME20 zeigt dies als "Total Energy" in kWh an
+# 32-bit Wert: [High Word, Low Word]
+# Beispiel: 29286700 Wh = 0x01BED6EC → [0x01BE, 0xD6EC]
+energy_high = (TOTAL_ENERGY_WH >> 16) & 0xFFFF
+energy_low = TOTAL_ENERGY_WH & 0xFFFF
+register_data[0x9C9D] = [energy_high, energy_low, 0x0000]  # High, Low, Scale Factor?
 
 # ---- 0x9C74 (40148): Serial Number (16 Register = 32 Bytes)
 # WR1: "34110779"
