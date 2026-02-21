@@ -59,6 +59,7 @@ _LOGGER = logging.getLogger(__name__)
 # Diese Variablen werden von EVCC WebSocket gefüllt
 current_power_w = STATIC_VALUES["power_w"]       # aktuelle Leistung
 current_energy_kwh = STATIC_VALUES["energy_kwh"] # Gesamtenergie
+register_lock = threading.Lock()
 
 # ====================================================
 # Hilfsfunktionen
@@ -78,19 +79,19 @@ def str_to_regs(s, num_regs):
 # Register-Update Funktionen (dynamische Werte)
 # ====================================================
 
-def update_power_register(power_w):
+def _update_power_register(power_w):
     """Update SunSpec AC Power Register (0x9C93)"""
     global sunspec_registers, holding
-    
+
     # 16-bit signed integer (für negative Werte)
     if power_w < 0:
         power_w = (1 << 16) + int(power_w)
     else:
         power_w = int(power_w) & 0xFFFF
-    
+
     sunspec_registers[AC_POWER_ADDR] = power_w
     sunspec_registers[AC_POWER_ADDR + 1] = 0x0000  # Scale Factor
-    
+
     # Auch in Holding-Array aktualisieren (mit +1 Offset)
     holding[AC_POWER_ADDR + 1] = power_w
     holding[AC_POWER_ADDR + 2] = 0x0000
@@ -100,21 +101,26 @@ def update_power_register(power_w):
     if store_ref is not None:
         store_ref.setValues(3, AC_POWER_ADDR, [power_w, 0x0000])
 
-def update_energy_register(energy_kwh):
+def update_power_register(power_w):
+    """Thread-sicheres Update des SunSpec AC Power Registers (0x9C93)"""
+    with register_lock:
+        _update_power_register(power_w)
+
+def _update_energy_register(energy_kwh):
     """Update SunSpec Total Energy Register (0x9C9D) - 32-bit"""
     global sunspec_registers, holding
-    
+
     # kWh → Wh (1:1 Mapping ohne Berechnungen)
     energy_wh = int(energy_kwh * 1000)
-    
+
     # 32-bit in zwei 16-bit Register aufteilen (Big Endian)
     high = (energy_wh >> 16) & 0xFFFF
     low = energy_wh & 0xFFFF
-    
+
     sunspec_registers[TOTAL_ENERGY_ADDR] = high
     sunspec_registers[TOTAL_ENERGY_ADDR + 1] = low
     sunspec_registers[TOTAL_ENERGY_ADDR + 2] = 0x0000  # Scale Factor
-    
+
     # Auch in Holding-Array aktualisieren (mit +1 Offset)
     holding[TOTAL_ENERGY_ADDR + 1] = high
     holding[TOTAL_ENERGY_ADDR + 2] = low
@@ -125,12 +131,18 @@ def update_energy_register(energy_kwh):
     if store_ref is not None:
         store_ref.setValues(3, TOTAL_ENERGY_ADDR, [high, low, 0x0000])
 
+def update_energy_register(energy_kwh):
+    """Thread-sicheres Update des SunSpec Total Energy Registers (0x9C9D)"""
+    with register_lock:
+        _update_energy_register(energy_kwh)
+
 def update_registers_from_values():
     """Update alle dynamischen Register basierend auf current_* Variablen"""
     global current_power_w, current_energy_kwh
-    
-    update_power_register(current_power_w)
-    update_energy_register(current_energy_kwh)
+
+    with register_lock:
+        _update_power_register(current_power_w)
+        _update_energy_register(current_energy_kwh)
 
 # ====================================================
 # SunSpec Register Dictionary definieren
