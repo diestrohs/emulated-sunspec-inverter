@@ -26,14 +26,15 @@ Ein Python-basierter SunSpec Modbus TCP Server, der die von NIBE EME20 erwartete
 
 1. [Übersicht](#übersicht)
 2. [Architektur](#architektur)
-3. [Installation](#installation)
-4. [Konfiguration](#konfiguration)
-5. [Verwendung](#verwendung)
-6. [Register-Mapping](#register-mapping)
-7. [Modbus Protokoll](#modbus-protokoll)
-8. [Docker Deployment](#docker-deployment)
-9. [Troubleshooting](#troubleshooting)
-10. [Getestete Werte](#getestete-werte)
+3. [Quick Start](#quick-start)
+4. [Installation](#installation)
+5. [Konfiguration](#konfiguration)
+6. [Verwendung](#verwendung)
+7. [Register-Mapping](#register-mapping)
+8. [Modbus Protokoll](#modbus-protokoll)
+9. [Docker Deployment](#docker-deployment)
+10. [Troubleshooting](#troubleshooting)
+11. [Getestete Werte](#getestete-werte)
 
 ---
 
@@ -55,6 +56,27 @@ Das **NIBE EME20** der WP ist ein **Modbus-Master** und liest folgende Register 
 - Device Status → Prüfung, ob WR aktiv ist
 
 Da die Daten mit mehreren WR und einer Batterie zu falschen Werten führt (z.B. Batterie wird von beiden WR geladen), EVCC jedoch über das Gesamtsystem informiert ist, werden vom Script die Daten von EVCC herangezogen und über eine authentische Modbus-Schnittstelle an die WR übermittelt. Damit wird sichergestellt, dass die WP nur in einen Boost-Modus geht, wenn ein tatsächlicher Überschuss besteht.
+
+---
+
+## ⚡ Quick Start
+
+### Lokal (Python)
+
+```bash
+pip install pymodbus==2.5.3 websockets
+python emulated_sunspec_inverter.py
+```
+
+### Docker (Compose)
+
+```bash
+git clone https://github.com/diestrohs/emulated-sunspec-inverter.git
+cd emulated-sunspec-inverter
+docker-compose -f docker-compose-emulated-sunspec-inverter.yml up -d
+```
+
+**Hinweis:** Für Live-Daten `LIVE = True` setzen und `EVCC_HOST` in `const.py` anpassen.
 
 ---
 
