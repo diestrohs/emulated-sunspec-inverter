@@ -1,6 +1,6 @@
-# Emulation eines SunSpec Wechselrichter für EME20 / NIBE auf Basis EVCC-Daten über Websockets 
+# Emulation eines SunSpec Wechselrichters für EME20 / NIBE auf Basis EVCC-Daten über Websockets
 
-**Version:** v0.0.10 - Thread-Safe Register Updates, Code Cleanup & Konsistenz
+**Version:** v0.1.0 - Thread-Safe Register Updates, Code Cleanup & Konsistenz
 
 ## 💡 Changelog (v0.1.0)
 
@@ -18,7 +18,7 @@
 
 ---
 
-Ein Python-basierter SunSpec Modbus TCP Server, der von NIBE EME20 erwarteten Register eines Wechselrichters (WR) emuliert. Wurde entwickelt, um eine NIBE Wärmepumpe (WP) mit EME20 mit Live-Daten von EVCC (PV-Management-System) zu versorgen.
+Ein Python-basierter SunSpec Modbus TCP Server, der die von NIBE EME20 erwarteten Register eines Wechselrichters (WR) emuliert. Wurde entwickelt, um eine NIBE Wärmepumpe (WP) mit EME20 mit Live-Daten von EVCC (PV-Management-System) zu versorgen.
 
 ---
 
@@ -54,7 +54,7 @@ Das **NIBE EME20** der WP ist ein **Modbus-Master** und liest folgende Register 
 - Total Energy (kWh) → zur Statistik
 - Device Status → Prüfung, ob WR aktiv ist
 
-Da die Daten mit mehreren WR und einer Batterie zu falschen Werten führt (z.B. Batterie wird von beiden WR geladen), EVCC jedoch über das Gesammtsysten informiert ist, werden vom Script die Daten von EVCC herangezogen und über eine authentische Modbus-Schnittstelle an die WR übermittelt. Damit wird sichergestellt, dass die WP nur in einen Boost-Modus geht, wenn ein tatsächlicher Überschuss besteht. 
+Da die Daten mit mehreren WR und einer Batterie zu falschen Werten führt (z.B. Batterie wird von beiden WR geladen), EVCC jedoch über das Gesamtsystem informiert ist, werden vom Script die Daten von EVCC herangezogen und über eine authentische Modbus-Schnittstelle an die WR übermittelt. Damit wird sichergestellt, dass die WP nur in einen Boost-Modus geht, wenn ein tatsächlicher Überschuss besteht.
 
 ---
 
@@ -73,7 +73,7 @@ Da die Daten mit mehreren WR und einer Batterie zu falschen Werten führt (z.B. 
         │  ├─ Filtert relevante Updates
         │  ├─ Dedupliziert Nachrichten (Signature)
         │  └─ Exponential Backoff bei Fehlern (1s → 60s)
-        │      └─ Schreibt in asynce Message Queue
+        │      └─ Schreibt in async Message Queue
         │
 ┌───────┴──────────────────────────────────────────────────────┐
 │ SunSpec WR Container (Modbus TCP Server)               │
@@ -98,7 +98,7 @@ Da die Daten mit mehreren WR und einer Batterie zu falschen Werten führt (z.B. 
 
 ---
 
-## 🔒 WebSocket Features (v0.0.6+) & Thread-Safety (v0.0.10+)
+## 🔒 WebSocket Features & Thread-Safety (v0.1.0+)
 
 ### Robuste Verbindung
 
@@ -125,7 +125,7 @@ Versuch N: max 60s (Plateau)
 **Vorteile:**
 - ✅ Verhindert Server-Overload bei Fehlern
 - ✅ Unbegrenzte Reconnect-Versuche
-- ✅ Smoothe Wiederherstellung ohne Spam
+- ✅ Smooth Wiederherstellung ohne Spam
 
 ### Message Deduplication
 
@@ -146,7 +146,7 @@ Empfangene Nachrichten werden in eine Warteschlange geschrieben und asynchron ve
 
 ---
 
-## �🚀 Installation
+## 🚀 Installation
 
 ### Anforderungen
 
@@ -232,7 +232,7 @@ python emulated_sunspec_inverter.py
 
 ```
 ======================================================================
-🚀 SunSpec Fake WR (Fronius Simulation) — v0.0.6
+🚀 Emulated SunSpec WR (OpenSource Simulation) — v0.1.0
 ======================================================================
 📡 Modbus TCP Port: 5202
 
@@ -276,7 +276,7 @@ python emulated_sunspec_inverter.py
 [MAIN] ✅ EVCC WebSocket-Worker gestartet (mit Reconnect & Message Queue)
 ```
 
-### WebSocket Features (v0.0.6+)
+### WebSocket Features (v0.1.0+)
 
 **Robuste Verbindung:**
 - ✅ **Timeouts:** `open_timeout=10s`, `ping_interval=30s`, `ping_timeout=10s`
@@ -401,7 +401,7 @@ git clone <REPO_URL> .
 docker-compose -f docker-compose-emulated-sunspec-inverter.yml up -d
 ```
 
-### Logs pruefen
+### Logs prüfen
 
 ```bash
 docker logs emulated-sunspec-inverter
@@ -416,9 +416,9 @@ docker-compose -f docker-compose-emulated-sunspec-inverter.yml restart emulated-
 ### Wichtige Docker-Konfiguration
 
 1. **Port-Mapping:** `5202:5202` → Modbus TCP
-2. **Netzwerk:** `bridge` fuer Zugriff auf EVCC-Container
-3. **Volume:** `/share/Container/EmulatedSunSpecInverter:/app` → Persist und Aenderungen
-4. **Dependencies:** Bei separaten Compose-Files ggfs. externe Netzwerke konfigurieren
+2. **Netzwerk:** `bridge` für Zugriff auf EVCC-Container
+3. **Volume:** `/share/Container/EmulatedSunSpecInverter:/app` → Persist und Änderungen
+4. **Dependencies:** Bei separaten Compose-Files ggf. externe Netzwerke konfigurieren
 
 ---
 
@@ -485,7 +485,7 @@ docker-compose -f docker-compose-emulated-sunspec-inverter.yml restart emulated-
 - ✅ EVCC Logs überprüfen (Version 0.210.2+?)
 - ✅ Script-Logs mit Debug-Level:
   ```bash
-  # Log-Level bereits auf DEBUG gesetzt in v0.0.6
+  # Log-Level bereits auf DEBUG gesetzt in v0.1.0
   # Suche nach "relevant" oder "duplicate" in den Logs
   ```
 
@@ -532,7 +532,7 @@ print(f'0x9CAB: {hex(holding[0x9CAB+1])}')  # Status
 "
 ```
 
-### 4. Statische Werte ändern
+### 5. Statische Werte ändern
 
 **Lösung:** Bearbeite `STATIC_VALUES` im Script:
 
@@ -548,9 +548,9 @@ Dann Container neu starten:
 docker-compose -f docker-compose-emulated-sunspec-inverter.yml restart emulated-sunspec-inverter
 ```
 
-### 5. Debug-Logs verstehen
+### 6. Debug-Logs verstehen
 
-**Log-Ausgaben in v0.0.6:**
+**Log-Ausgaben in v0.1.0:**
 
 ```
 [INFO] WebSocket-Client gestartet
@@ -579,11 +579,6 @@ docker-compose -f docker-compose-emulated-sunspec-inverter.yml restart emulated-
 
 [DEBUG] Backoff nach WS-Fehler: 2.45s
   ✓ Wartet 2.45s bis zur nächsten Reconnect-Versuch
-```
-
----
-```bash
-docker-compose -f docker-compose-emulated-sunspec-inverter.yml restart emulated-sunspec-inverter
 ```
 
 ---
@@ -662,7 +657,8 @@ Dieses Projekt ist für Privat-/Testgebrauch gedacht.
 
 | Version | Datum | Änderung |
 |---------|-------|----------|
-| **v0.0.6** | **2026-02-20** | **Production-Grade WebSocket:** Exponential Backoff, Message Queue, Deduplication, Timeouts |
+| **v0.1.0** | **2026-02-22** | **Thread-Safe Updates:** Wrapper-Funktionen, Cleanup, Konsistenz |
+| v0.0.6 | 2026-02-20 | Production-Grade WebSocket: Exponential Backoff, Message Queue, Deduplication, Timeouts |
 | v0.0.5 | 2026-02-20 | EVCC WebSocket Integration, Docker-Support |
 | v0.0.4 | 2026-02-19 | Modbus Register durchgetestet |
 | v0.0.1 | 2026-02-15 | Initiale Version |
