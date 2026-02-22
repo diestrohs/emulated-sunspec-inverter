@@ -80,6 +80,22 @@ docker-compose -f docker-compose-emulated-sunspec-inverter.yml up -d
 
 ---
 
+## 🧰 Verwendete Hardware
+
+- gridconnect NET485-MB - Modbus RS485 Adapter
+- NIBE EME20
+- NIBE F750
+
+**Kommunikationskette:**
+EVCC -- WebSocket/TCP -- NET485-MB -- EME20 -- proprietäres Protokoll -- F750
+
+### NET485-MB Konfiguration (Beispiele)
+
+![NET485-MB RS485 Settings](docs/assets/RS485_Settings.png)
+![NET485-MB TCP Settings](docs/assets/TCP_Settings.png)
+
+---
+
 ## 🏗️ Architektur
 
 ```
