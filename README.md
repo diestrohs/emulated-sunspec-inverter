@@ -1,8 +1,24 @@
-# SunSpec Fake WR (Wechselrichter) für EME20 / NIBE
+# Emulation eines SunSpec Wechselrichter für EME20 / NIBE auf Basis EVCC-Daten über Websockets 
 
-**Version:** v0.0.6 - Production-Grade WebSocket mit Reconnect & Message Queue
+**Version:** v0.0.10 - Thread-Safe Register Updates, Code Cleanup & Konsistenz
 
-Ein Python-basierter SunSpec Modbus TCP Server, der Fronius-kompatible Register simuliert. Wurde entwickelt, um die NIBE EME20 Wärmepumpe mit Live-Daten von EVCC (PV-Management-System) zu versorgen.
+## 💡 Changelog (v0.1.0)
+
+### ✨ Verbesserungen
+- **Thread-Safety:** Alle dynamischen Register-Updates laufen über sichere Wrapper (`update_power_register()`, `update_energy_register()`)
+- **Code-Cleanup:** Doppelte Initialisierungen entfernt, Formatierung bereinigt
+- **Konsistenz:** Docstrings und Kommentare auf aktuelle README abgestimmt
+- **Naming:** Hersteller auf "OpenSource" standardisiert statt "Fronius"
+- **Testing:** Validiert mit echten NIBE EME20 Modbus-Traces
+
+### 🔧 Interne Änderungen
+- `update_registers_from_values()` nutzt jetzt immer thread-sichere Wrapper
+- Interne Helper (`_update_power_register()`, `_update_energy_register()`) dokumentiert
+- Modbus-Datastore wird konsistent aktualisiert (globales Dict + Holding-Array + Store)
+
+---
+
+Ein Python-basierter SunSpec Modbus TCP Server, der von NIBE EME20 erwarteten Register eines Wechselrichters (WR) emuliert. Wurde entwickelt, um eine NIBE Wärmepumpe (WP) mit EME20 mit Live-Daten von EVCC (PV-Management-System) zu versorgen.
 
 ---
 
@@ -25,7 +41,7 @@ Ein Python-basierter SunSpec Modbus TCP Server, der Fronius-kompatible Register 
 
 ### Was macht dieses Script?
 
-Dieser Fake-Wechselrichter emuliert eine Fronius-kompatible Modbus-TCP Schnittstelle und antwortet auf die gleichen Register wie ein echter WR:
+Dieses Python-Script emuliert eine kompatible Modbus-TCP Schnittstelle und antwortet auf die gleichen Register wie ein echter WR:
 
 - **Statische Daten:** Geräte-ID, Seriennummer, Status
 - **Dynamische Daten:** Aktuelle Netzleistung und kumulierte Energie von EVCC
@@ -33,12 +49,12 @@ Dieser Fake-Wechselrichter emuliert eine Fronius-kompatible Modbus-TCP Schnittst
 
 ### Wofür?
 
-Die **NIBE EME20** Wärmepumpe ist ein echter **Modbus-Master** und liest folgende Register:
+Das **NIBE EME20** der WP ist ein **Modbus-Master** und liest folgende Register von einem **Modbus-Slave** WR:
 - Power (W) → zur Regelung des PV-Modus
 - Total Energy (kWh) → zur Statistik
 - Device Status → Prüfung, ob WR aktiv ist
 
-Statt einen echten Fronius anzuschaffen, simuliert dieses Script eine authentische Modbus-Schnittstelle.
+Da die Daten mit mehreren WR und einer Batterie zu falschen Werten führt (z.B. Batterie wird von beiden WR geladen), EVCC jedoch über das Gesammtsysten informiert ist, werden vom Script die Daten von EVCC herangezogen und über eine authentische Modbus-Schnittstelle an die WR übermittelt. Damit wird sichergestellt, dass die WP nur in einen Boost-Modus geht, wenn ein tatsächlicher Überschuss besteht. 
 
 ---
 
@@ -47,8 +63,8 @@ Statt einen echten Fronius anzuschaffen, simuliert dieses Script eine authentisc
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │ EVCC Container (PV-Erzeugung, Batterie, Netz)               │
-│   └─ WebSocket ws://<host>:7070/ws ⭐ (nicht /api/ws!)       │
-│         └─ Daten: pvEnergy, residualPower (30s Heartbeat)   │
+│   └─ WebSocket ws://<host>:7070/ws       │
+│         └─ Daten: grid.power, pvEnergy (30s Heartbeat)      │
 └──────────────────────────┬───────────────────────────────────┘
                            │
                            ▼
@@ -60,7 +76,7 @@ Statt einen echten Fronius anzuschaffen, simuliert dieses Script eine authentisc
         │      └─ Schreibt in asynce Message Queue
         │
 ┌───────┴──────────────────────────────────────────────────────┐
-│ SunSpec Fake WR Container (Modbus TCP Server)               │
+│ SunSpec WR Container (Modbus TCP Server)               │
 │   ├─ EvccWebsocketClient._consume_messages()                 │
 │   │   └─ Verarbeitet Queue asynchron (non-blocking)         │
 │   └─ Aktualisiert Modbus-Register in Echtzeit               │
@@ -69,7 +85,7 @@ Statt einen echten Fronius anzuschaffen, simuliert dieses Script eine authentisc
                            │
                            ▼
 ┌──────────────────────────────────────────────────────────────┐
-│ NIBE EME20 Wärmepumpe (Modbus TCP Master)                   │
+│ NIBE EME20 der Wärmepumpe (Modbus TCP Master)                   │
 │   └─ liest mit ~4ms Abstand                                  │
 │   └─ aktiviert PV-Modus / Belüftung basierend auf Power     │
 └──────────────────────────────────────────────────────────────┘
@@ -77,14 +93,12 @@ Statt einen echten Fronius anzuschaffen, simuliert dieses Script eine authentisc
 
 **Datenfluss:**
 1. EVCC sendet PV-Daten alle ~1-2 Sekunden via WebSocket
-2. Fake-WR empfängt, dedupliziert und aktualisiert Register
+2. Emulated SunSpec Inverter empfängt, dedupliziert und aktualisiert Register
 3. EME20 liest aktuelle Werte via Modbus-TCP (~4ms Zyklus)
 
 ---
 
-## � WebSocket Features (v0.0.6+)
-
-Das Script nutzt eine **Production-Grade WebSocket-Implementierung** basierend auf Best Practices aus [ha-evcc-scheduler](https://github.com/diestrohs/ha-evcc-scheduler):
+## 🔒 WebSocket Features (v0.0.6+) & Thread-Safety (v0.0.10+)
 
 ### Robuste Verbindung
 
@@ -144,7 +158,7 @@ Empfangene Nachrichten werden in eine Warteschlange geschrieben und asynchron ve
 
 ```bash
 pip install pymodbus==2.5.3 websockets
-python sunspec_fake_wr.py
+python emulated_sunspec_inverter.py
 ```
 
 ---
@@ -211,7 +225,7 @@ STATIC_VALUES = {
 ### Starten (lokal)
 
 ```bash
-python sunspec_fake_wr.py
+python emulated_sunspec_inverter.py
 ```
 
 **Erwartete Ausgabe:**
@@ -294,7 +308,7 @@ Detailliertes SunSpec-Register-Mapping für Fronius-kompatible Geräte:
 | 0x9C44 | 40004 | Manufacturer | String | 5 | `OpenSource` | ✅ FIX | Hersteller |
 | 0x9C7A | 40122 | Model | String | 8 | `EVCC` | ⚠️ OPT | Modell (optional) |
 | 0x9C74 | 40148 | Serial | String | 16 | `12345678` | ✅ FIX | Seriennummer |
-| **0x9C93** | **40179** | **AC Power** | **Int16** | **2** | **0 W** | **✅ LIVE** | **Aktuell: residualPower von EVCC** |
+| **0x9C93** | **40179** | **AC Power** | **Int16** | **2** | **0 W** | **✅ LIVE** | **Aktuell: -grid.power von EVCC (Einspeisung als positiv)** |
 | **0x9C9D** | **40189** | **Total Energy** | **Int32** | **3** | **58.940.910 Wh** | **✅ LIVE** | **Akkumuliert: pvEnergy von EVCC (kWh → Wh)** |
 | 0x9CA2 | 40194 | VPV1 (DC) | Int16 | 2 | 600 V | ⚠️ OPT | DC Spannung Phase 1 |
 | **0x9CAB** | **40235** | **Device Status** | **Int16** | **1** | **0x0002** | **✅ FIX** | **0x0002=RUNNING, 0x0001=IDLE** |
@@ -346,24 +360,24 @@ Das Script implementiert die minimalen **Modbus Function Codes** für EME20:
 
 ## 🐳 Docker Deployment
 
-### docker-compose-fakewr.yml
+### docker-compose-emulated-sunspec-inverter.yml
 
 ```yaml
 version: "3.9"
 
 services:
-  sunspec-fakewr:
+  emulated-sunspec-inverter:
     image: python:3.11-slim
-    container_name: sunspec-fakewr
+    container_name: emulated-sunspec-inverter
     restart: unless-stopped
 
     volumes:
-      - /share/Container/FakeWR:/app
+      - /share/Container/EmulatedSunSpecInverter:/app
     working_dir: /app
 
     command: >
-      sh -c "pip install pymodbus==2.5.3 websocket-client &&
-             python sunspec_fake_wr.py"
+      sh -c "pip install pymodbus==2.5.3 websockets &&
+             python emulated_sunspec_inverter.py"
 
     ports:
       - "5202:5202"
@@ -371,23 +385,39 @@ services:
     network_mode: bridge
 ```
 
-### Starten auf QNAP
+### Volume anlegen (Host-Verzeichnis)
+
+Die Compose-Datei nutzt ein Bind-Mount als Volume. Lege das Verzeichnis an und lege dort die Dateien ab:
 
 ```bash
-docker-compose -f docker-compose-fakewr.yml up -d
+mkdir -p /share/Container/EmulatedSunSpecInverter
+cd /share/Container/EmulatedSunSpecInverter
+git clone <REPO_URL> .
 ```
 
-### Logs prüfen
+### Container erstellen und starten
 
 ```bash
-docker logs sunspec-fakewr
+docker-compose -f docker-compose-emulated-sunspec-inverter.yml up -d
+```
+
+### Logs pruefen
+
+```bash
+docker logs emulated-sunspec-inverter
+```
+
+### Container neu starten
+
+```bash
+docker-compose -f docker-compose-emulated-sunspec-inverter.yml restart emulated-sunspec-inverter
 ```
 
 ### Wichtige Docker-Konfiguration
 
 1. **Port-Mapping:** `5202:5202` → Modbus TCP
-2. **Netzwerk:** `bridge` für Zugriff auf EVCC-Container
-3. **Volume:** `/share/Container/FakeWR:/app` → Persist und Änderungen
+2. **Netzwerk:** `bridge` fuer Zugriff auf EVCC-Container
+3. **Volume:** `/share/Container/EmulatedSunSpecInverter:/app` → Persist und Aenderungen
 4. **Dependencies:** Bei separaten Compose-Files ggfs. externe Netzwerke konfigurieren
 
 ---
@@ -429,7 +459,7 @@ docker logs sunspec-fakewr
    **Logs prüfen:**
    ```bash
    # Im Docker-Container:
-   docker logs sunspec-fakewr | grep -i evcc
+  docker logs emulated-sunspec-inverter | grep -i evcc
    ```
 
 4. **Firewall/Netzwerk blockiert**
@@ -490,13 +520,13 @@ docker logs sunspec-fakewr
 
 ```bash
 # Logs anschauen
-docker logs sunspec-fakewr
+docker logs emulated-sunspec-inverter
 
 # Oder direkt im Container:
-docker exec sunspec-fakewr python -c "
+docker exec emulated-sunspec-inverter python -c "
 import sys
 sys.path.insert(0, '.')
-from sunspec_fake_wr import holding
+from emulated_sunspec_inverter import holding
 print(f'0x9C93: {hex(holding[0x9C93+1])}')  # Power
 print(f'0x9CAB: {hex(holding[0x9CAB+1])}')  # Status
 "
@@ -515,7 +545,7 @@ STATIC_VALUES = {
 
 Dann Container neu starten:
 ```bash
-docker-compose restart sunspec-fakewr
+docker-compose -f docker-compose-emulated-sunspec-inverter.yml restart emulated-sunspec-inverter
 ```
 
 ### 5. Debug-Logs verstehen
@@ -533,7 +563,7 @@ docker-compose restart sunspec-fakewr
   ✓ Verbindung erfolgreich, Daten werden empfangen
 
 [DEBUG] Relevante WS-Nachricht empfangen
-  ✓ Neue EVCC-Daten (gridPower, pvEnergy) verarbeitet
+  ✓ Neue EVCC-Daten (grid.power, pvEnergy) verarbeitet
 
 [DEBUG] Power aktualisiert: 4000 W → 5250 W
   ✓ Leistungswert hat sich geändert, Register aktualisiert
@@ -553,7 +583,7 @@ docker-compose restart sunspec-fakewr
 
 ---
 ```bash
-docker-compose restart sunspec-fakewr
+docker-compose -f docker-compose-emulated-sunspec-inverter.yml restart emulated-sunspec-inverter
 ```
 
 ---

@@ -1,5 +1,5 @@
 """
-Konstanten für SunSpec Fake WR
+Konstanten für Emulated SunSpec WR
 """
 
 # ====================================================
@@ -60,14 +60,14 @@ WS_BACKOFF_MAX = 60                # Maximales Backoff (Sekunden)
 # ====================================================
 # VERSION
 # ====================================================
-VERSION = "v0.0.6"
-VERSION_INFO = "Production-Grade WebSocket mit Reconnect & Message Queue"
+VERSION = "v0.1.0"
+VERSION_INFO = "Code Cleanup, Thread-Safe Register Updates, Konsistenz-Verbesserungen"
 
 # ====================================================
 # SUNSPEC REGISTER MAPPING
 # ====================================================
 SUNSPEC_IDENTIFIER_ADDR = 0x9C40   # "SunS"
-MANUFACTURER_ADDR = 0x9C44         # "Fronius"
+MANUFACTURER_ADDR = 0x9C44         # "OpenSource"
 SERIAL_NUMBER_ADDR = 0x9C74        # Seriennummer
 INVERTER_STATUS_ADDR = 0x9CAB      # Status (RUNNING/IDLE)
 AC_POWER_ADDR = 0x9C93             # AC Total Power
